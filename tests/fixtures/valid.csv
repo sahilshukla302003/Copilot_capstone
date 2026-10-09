@@ -1,0 +1,5 @@
+name,age,joined_date,notes
+Alice,30,2024-01-15,regular customer
+Bob,25,2023-06-01,
+Carol,35,2022-11-30,VIP
+Dave,,2024-03-10,referred by Alice

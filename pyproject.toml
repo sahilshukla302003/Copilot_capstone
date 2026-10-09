@@ -8,8 +8,15 @@ version = "0.1.0"
 description = "Agentic SDLC pipeline driven by GitHub Copilot"
 requires-python = ">=3.11"
 
+[project.optional-dependencies]
+test = ["pytest", "pytest-cov"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/csv_summary"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["src"]
 
 [tool.ruff]
 line-length = 88
