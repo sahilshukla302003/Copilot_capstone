@@ -1,44 +1,69 @@
-"""Streaming CSV row reader."""
+"""Streaming CSV row reader: path/encoding validation and malformed-row detection."""
 
 from __future__ import annotations
 
 import csv
 import os
 from collections.abc import Iterator
-from pathlib import Path
+from typing import TextIO
 
-from csv_summary.models import CsvFileNotFoundError
-
-
-def _validate_readable(path: str | os.PathLike[str]) -> Path:
-    file_path = Path(path)
-    if not file_path.exists():
-        raise CsvFileNotFoundError(f"file not found: {file_path}")
-    if not os.access(file_path, os.R_OK):
-        raise PermissionError(f"permission denied: {file_path}")
-    return file_path
+from csv_summary.models import CsvFileNotFoundError, MalformedRow, RawRow
 
 
-def open_rows(path: str | os.PathLike[str]) -> Iterator[dict[str, str | None]]:
-    """Yield each data row of the CSV at path as a dict keyed by header name.
+def _open_text(path: str) -> TextIO:
+    """Open path for reading as UTF-8 (or UTF-8-with-BOM).
 
-    A fresh generator is returned on every call, so the file can be streamed
-    multiple times (once per pipeline pass) without buffering it in memory.
-    Ragged rows (extra or missing fields relative to the header) are tolerated:
-    DictReader puts overflow values under the None key and missing fields as None.
+    Raises CsvFileNotFoundError for a missing path and IsADirectoryError for a
+    directory path, normalizing Windows' PermissionError-on-directory behavior
+    to match POSIX's IsADirectoryError.
     """
-    file_path = _validate_readable(path)
-
-    def _generator() -> Iterator[dict[str, str | None]]:
-        with file_path.open(newline="", encoding="utf-8") as handle:
-            reader = csv.DictReader(handle)
-            yield from reader
-
-    return _generator()
+    if os.path.isdir(path):
+        raise IsADirectoryError(f"Is a directory: '{path}'")
+    try:
+        return open(path, encoding="utf-8-sig", newline="")
+    except FileNotFoundError as exc:
+        raise CsvFileNotFoundError(path) from exc
 
 
-def has_data_rows(path: str | os.PathLike[str]) -> bool:
+def stream_rows(
+    path: str, *, file_obj: TextIO | None = None
+) -> tuple[list[str], Iterator[RawRow | MalformedRow]]:
+    """Return (header, row_iterator) for the CSV at path.
+
+    Opens path (or uses the provided file_obj, e.g. an io.StringIO, for tests),
+    reads the header once, and returns a generator yielding each subsequent data
+    row as a RawRow (field count matches header) or MalformedRow (it doesn't),
+    without ever materializing the full file in memory.
+    """
+    handle = file_obj if file_obj is not None else _open_text(path)
+    csv_reader = csv.reader(handle)
+    try:
+        header = next(csv_reader)
+    except StopIteration:
+        header = []
+
+    def _rows() -> Iterator[RawRow | MalformedRow]:
+        try:
+            for row_number, fields in enumerate(csv_reader, start=1):
+                if len(fields) != len(header):
+                    yield MalformedRow(row_number, fields, len(header))
+                else:
+                    yield RawRow(row_number, fields)
+        finally:
+            if file_obj is None:
+                handle.close()
+
+    return header, _rows()
+
+
+def has_data_rows(path: str) -> bool:
     """Return True if the CSV at path has at least one data row beyond the header."""
-    for _ in open_rows(path):
+    _, rows = stream_rows(path)
+    try:
+        next(rows)
+    except StopIteration:
+        return False
+    else:
         return True
-    return False
+    finally:
+        rows.close()

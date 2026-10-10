@@ -1,6 +1,7 @@
-name,score,signup_date
-Alice,10,2024-01-01
-Bob,NA,2024-02-01
-Carol,20,null
-,30,2024-04-01
-Eve,N/A,
+id,name,signup_date,score
+1,Alice,2023-01-15,91.5
+2,,2023-02-20,NA
+3,Carol,,88
+4,N/A,2023-04-10,
+5,Eve,NULL,76
+6,None,2023-06-01,64
