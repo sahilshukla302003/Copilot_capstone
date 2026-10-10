@@ -30,3 +30,6 @@ output/test-results/
 # OS artefacts
 .DS_Store
 Thumbs.db
+
+# Generated large benchmark fixture (exceeds GitHub 100MB limit)
+tests/fixtures/large_benchmark.csv
